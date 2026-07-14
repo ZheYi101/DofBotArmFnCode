@@ -1,0 +1,45 @@
+{
+  "snapshot_id": "2026-07-14_before_flip_depth_signs",
+  "captured_on": "2026-07-14",
+  "notes": [
+    "Snapshot taken before flipping the depth-compensation signs after the user clarified that 'too far' means the grasp lands farther away from the arm than the block.",
+    "This captures the split-depth rules that still used a negative dy on the right mid-field band."
+  ],
+  "vision": {
+    "min_area": 1200,
+    "map_merge_distance_m": 0.03,
+    "cross_color_conflict_distance_m": 0.025,
+    "cross_color_conflict_max_area_ratio": 0.35,
+    "cross_color_conflict_max_score_ratio": 0.65
+  },
+  "feedback_compensation": {
+    "version": 1,
+    "rules": [
+      {
+        "id": "right_midfield_depth_pullback_v3",
+        "enabled": true,
+        "workspace_x_min": 0.12,
+        "workspace_y_min": 0.19,
+        "workspace_y_max": 0.23,
+        "scale_x": 0.97,
+        "scale_y": 1.0,
+        "pivot_x": 0.0,
+        "pivot_y": 0.19,
+        "dx_m": 0.0,
+        "dy_m": -0.012
+      },
+      {
+        "id": "left_center_deepfield_push_v1",
+        "enabled": true,
+        "workspace_x_max": 0.0,
+        "workspace_y_min": 0.26,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "pivot_x": 0.0,
+        "pivot_y": 0.19,
+        "dx_m": 0.0,
+        "dy_m": 0.015
+      }
+    ]
+  }
+}

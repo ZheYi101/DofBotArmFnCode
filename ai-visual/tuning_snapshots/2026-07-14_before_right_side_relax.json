@@ -1,0 +1,32 @@
+{
+  "snapshot_id": "2026-07-14_before_right_side_relax",
+  "captured_on": "2026-07-14",
+  "notes": [
+    "Snapshot taken before reducing the right-side far-field y shear.",
+    "This also records the pre-change vision area floor that still allowed a ~981px false extra block."
+  ],
+  "vision": {
+    "min_area": 800,
+    "map_merge_distance_m": 0.03
+  },
+  "feedback_compensation": {
+    "version": 1,
+    "rules": [
+      {
+        "id": "far_field_side_shear_v2",
+        "enabled": true,
+        "workspace_x_min": 0.0,
+        "workspace_radius_min": 0.14,
+        "radius_origin_x": 0.0,
+        "radius_origin_y": 0.19,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "y_shear_m_per_m": -0.28,
+        "pivot_x": 0.0,
+        "pivot_y": 0.19,
+        "dx_m": 0.0,
+        "dy_m": 0.0
+      }
+    ]
+  }
+}

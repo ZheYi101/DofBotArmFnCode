@@ -2,20 +2,20 @@
   "vision": {
     "hsv_ranges": {
       "red": [
-        [[0, 70, 50], [18, 255, 255]],
-        [[155, 70, 50], [180, 255, 255]]
+        [[0, 155, 143], [8, 255, 255]],
+        [[156, 155, 143], [180, 255, 255]]
       ],
       "yellow": [
-        [[18, 90, 100], [34, 255, 255]]
+        [[12, 151, 150], [50, 255, 255]]
       ],
       "green": [
-        [[35, 50, 40], [95, 255, 255]]
+        [[70, 154, 66], [96, 255, 255]]
       ],
       "blue": [
-        [[95, 100, 50], [130, 255, 255]]
+        [[103, 122, 109], [119, 255, 255]]
       ]
     },
-    "min_area": 800,
+    "min_area": 1200,
     "max_area": 30000,
     "min_aspect_ratio": 1.0,
     "max_aspect_ratio": 2.0,
@@ -29,7 +29,21 @@
     "canny_low": 40,
     "canny_high": 120,
     "multi_object_track_radius_px": 45,
-    "map_merge_distance_m": 0.03
+    "map_merge_distance_m": 0.03,
+    "cross_color_conflict_distance_m": 0.025,
+    "cross_color_conflict_max_area_ratio": 0.35,
+    "cross_color_conflict_max_score_ratio": 0.65,
+    "fusion": {
+      "inlier_radius_m": 0.015,
+      "minimum_inlier_views": 2,
+      "center_scale_px": 120,
+      "area_reference_px": 3000,
+      "area_exponent": 0.5,
+      "min_ring_factor": 0.25,
+      "edge_reference": 0.08,
+      "min_edge_factor": 0.75,
+      "max_edge_factor": 1.5
+    }
   },
   "arm": {
     "gripper_open": 30,

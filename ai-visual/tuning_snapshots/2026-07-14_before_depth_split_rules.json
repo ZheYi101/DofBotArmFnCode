@@ -1,0 +1,35 @@
+{
+  "snapshot_id": "2026-07-14_before_depth_split_rules",
+  "captured_on": "2026-07-14",
+  "notes": [
+    "Snapshot taken after cross-color conflict suppression and mild right-side x pullback were enabled.",
+    "This captures the single-rule depth correction before splitting depth compensation into separate workspace regions."
+  ],
+  "vision": {
+    "min_area": 1200,
+    "map_merge_distance_m": 0.03,
+    "cross_color_conflict_distance_m": 0.025,
+    "cross_color_conflict_max_area_ratio": 0.35,
+    "cross_color_conflict_max_score_ratio": 0.65
+  },
+  "feedback_compensation": {
+    "version": 1,
+    "rules": [
+      {
+        "id": "far_field_side_shear_v2",
+        "enabled": true,
+        "workspace_x_min": 0.0,
+        "workspace_radius_min": 0.14,
+        "radius_origin_x": 0.0,
+        "radius_origin_y": 0.19,
+        "scale_x": 0.97,
+        "scale_y": 1.0,
+        "y_shear_m_per_m": -0.18,
+        "pivot_x": 0.0,
+        "pivot_y": 0.19,
+        "dx_m": 0.0,
+        "dy_m": 0.0
+      }
+    ]
+  }
+}

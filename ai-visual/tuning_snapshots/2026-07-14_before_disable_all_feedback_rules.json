@@ -1,0 +1,58 @@
+{
+  "snapshot_id": "2026-07-14_before_disable_all_feedback_rules",
+  "captured_on": "2026-07-14",
+  "notes": [
+    "Snapshot taken before disabling all workspace feedback rules.",
+    "The user reported that both left and right targets were driven even farther away, confirming this compensation set was amplifying the miss direction."
+  ],
+  "vision": {
+    "min_area": 1200,
+    "map_merge_distance_m": 0.03,
+    "cross_color_conflict_distance_m": 0.025,
+    "cross_color_conflict_max_area_ratio": 0.35,
+    "cross_color_conflict_max_score_ratio": 0.65
+  },
+  "feedback_compensation": {
+    "version": 1,
+    "rules": [
+      {
+        "id": "right_midfield_depth_push_v4",
+        "enabled": true,
+        "workspace_x_min": 0.12,
+        "workspace_y_min": 0.18,
+        "workspace_y_max": 0.23,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "pivot_x": 0.0,
+        "pivot_y": 0.19,
+        "dx_m": 0.0,
+        "dy_m": 0.012
+      },
+      {
+        "id": "left_midfield_depth_push_v1",
+        "enabled": true,
+        "workspace_x_max": 0.0,
+        "workspace_y_min": 0.22,
+        "workspace_y_max": 0.26,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "pivot_x": 0.0,
+        "pivot_y": 0.19,
+        "dx_m": 0.0,
+        "dy_m": 0.01
+      },
+      {
+        "id": "left_center_deepfield_push_v1",
+        "enabled": true,
+        "workspace_x_max": 0.0,
+        "workspace_y_min": 0.26,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "pivot_x": 0.0,
+        "pivot_y": 0.19,
+        "dx_m": 0.0,
+        "dy_m": 0.015
+      }
+    ]
+  }
+}

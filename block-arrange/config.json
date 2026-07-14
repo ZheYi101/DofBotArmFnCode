@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "ai_visual": {
+    "relative_path": "functions/ai-visual",
+    "config_file": "config.json",
+    "feedback_config_file": "feedback_compensation.json",
+    "scan_dir": "scan",
+    "map_output": "scan_map.json"
+  },
+  "scene": {
+    "default_distance_cm": 3.0,
+    "max_stack_levels": 4
+  },
+  "motion": {
+    "level_pose_offsets": {
+      "1": [0, 0, 0, 0, 0],
+      "2": [0, 14, -8, 5, 0],
+      "3": [0, 17, 9, -13, 0],
+      "4": [-1, 43, -8, -3, 0]
+    },
+    "level_polar_offsets": {
+      "1": {"radial_m": 0.0, "tangent_m": 0.0},
+      "2": {"radial_m": 0.01, "tangent_m": 0.03},
+      "3": {"radial_m": 0.03, "tangent_m": -0.01},
+      "4": {"radial_m": 0.03, "tangent_m": -0.01}
+    },
+    "approach_servo2": 80,
+    "approach_servo3": 50,
+    "approach_servo4": 50,
+    "observe_move_time_ms": 1000,
+    "top_move_time_ms": 1000,
+    "approach_move_time_ms": 900,
+    "place_move_time_ms": 1000,
+    "post_place_delay_seconds": 0.2
+  }
+}

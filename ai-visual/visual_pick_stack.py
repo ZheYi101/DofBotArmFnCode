@@ -13,7 +13,7 @@ import json
 import math
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -46,11 +46,81 @@ class MappedBlock:
     coordinate_spread_m: float = 0.0
     supporting_views: int = 1
     target_id: str = ""
+    raw_coordinate_spread_m: float = 0.0
+    raw_supporting_views: int = 1
+    outlier_views: int = 0
+    fusion_method: str = "best_view"
+    raw_workspace: Tuple[float, float] = (0.0, 0.0)
+    workspace_correction_dx_m: float = 0.0
+    workspace_correction_dy_m: float = 0.0
+    workspace_correction_rule: str = ""
+    workspace_correction_note: str = ""
+
+
+@dataclass
+class WorkspaceCorrectionRule:
+    rule_id: str
+    enabled: bool = True
+    color: Optional[str] = None
+    x_min: Optional[float] = None
+    x_max: Optional[float] = None
+    y_min: Optional[float] = None
+    y_max: Optional[float] = None
+    radius_min: Optional[float] = None
+    radius_max: Optional[float] = None
+    radius_origin_x: float = 0.0
+    radius_origin_y: float = 0.19
+    scan_angle_min: Optional[float] = None
+    scan_angle_max: Optional[float] = None
+    dx_m: float = 0.0
+    dy_m: float = 0.0
+    scale_x: float = 1.0
+    scale_y: float = 1.0
+    y_shear_m_per_m: float = 0.0
+    pivot_x: float = 0.0
+    pivot_y: float = 0.19
+    note: str = ""
 
 
 def load_config(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as file_obj:
         return json.load(file_obj)
+
+
+def load_workspace_corrections(path: Path) -> List[WorkspaceCorrectionRule]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as file_obj:
+        payload = json.load(file_obj)
+    rules: List[WorkspaceCorrectionRule] = []
+    for index, raw_rule in enumerate(payload.get("rules", []), start=1):
+        rule_id = str(raw_rule.get("id") or "rule-%02d" % index)
+        rules.append(
+            WorkspaceCorrectionRule(
+                rule_id=rule_id,
+                enabled=bool(raw_rule.get("enabled", True)),
+                color=raw_rule.get("color"),
+                x_min=raw_rule.get("workspace_x_min"),
+                x_max=raw_rule.get("workspace_x_max"),
+                y_min=raw_rule.get("workspace_y_min"),
+                y_max=raw_rule.get("workspace_y_max"),
+                radius_min=raw_rule.get("workspace_radius_min"),
+                radius_max=raw_rule.get("workspace_radius_max"),
+                radius_origin_x=float(raw_rule.get("radius_origin_x", 0.0)),
+                radius_origin_y=float(raw_rule.get("radius_origin_y", 0.19)),
+                scan_angle_min=raw_rule.get("scan_angle_min"),
+                scan_angle_max=raw_rule.get("scan_angle_max"),
+                dx_m=float(raw_rule.get("dx_m", 0.0)),
+                dy_m=float(raw_rule.get("dy_m", 0.0)),
+                scale_x=float(raw_rule.get("scale_x", 1.0)),
+                scale_y=float(raw_rule.get("scale_y", 1.0)),
+                y_shear_m_per_m=float(raw_rule.get("y_shear_m_per_m", 0.0)),
+                pivot_x=float(raw_rule.get("pivot_x", 0.0)),
+                pivot_y=float(raw_rule.get("pivot_y", 0.19)),
+                note=str(raw_rule.get("note", "")),
+            )
+        )
+    return rules
 
 
 class ColorBlockDetector:
@@ -395,11 +465,301 @@ def cluster_mapped_candidates(
     return clusters
 
 
+def anchor_view_sort_key(item: MappedBlock) -> Tuple[float, float, float]:
+    """Prefer views near the optical centre with stronger non-marker evidence."""
+
+    return (
+        abs(item.detection.center[0] - 320),
+        item.detection.white_ring_ratio,
+        -item.detection.area,
+    )
+
+
+def candidate_workspace_weight(item: MappedBlock, config: dict) -> float:
+    """Score one observation for fusion; higher means more trustworthy."""
+
+    fusion = config.get("vision", {}).get("fusion", {})
+    center_scale_px = max(1.0, float(fusion.get("center_scale_px", 120.0)))
+    area_reference_px = max(1.0, float(fusion.get("area_reference_px", 3000.0)))
+    area_exponent = float(fusion.get("area_exponent", 0.5))
+    min_ring_factor = max(0.05, float(fusion.get("min_ring_factor", 0.25)))
+    edge_reference = max(1e-6, float(fusion.get("edge_reference", 0.08)))
+    min_edge_factor = float(fusion.get("min_edge_factor", 0.75))
+    max_edge_factor = max(
+        min_edge_factor, float(fusion.get("max_edge_factor", 1.5))
+    )
+
+    center_distance = abs(item.detection.center[0] - 320.0)
+    center_factor = 1.0 / (1.0 + center_distance / center_scale_px)
+
+    area_ratio = max(item.detection.area, 1.0) / area_reference_px
+    area_factor = min(2.5, max(0.35, area_ratio ** area_exponent))
+
+    ring_factor = max(min_ring_factor, 1.0 - item.detection.white_ring_ratio)
+
+    edge_factor = item.detection.body_edge_ratio / edge_reference
+    edge_factor = min(max_edge_factor, max(min_edge_factor, edge_factor))
+
+    return center_factor * area_factor * ring_factor * edge_factor
+
+
+def distance_m(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    return float(math.hypot(a[0] - b[0], a[1] - b[1]))
+
+
+def _rule_matches_workspace(
+    rule: WorkspaceCorrectionRule, item: MappedBlock, workspace: Tuple[float, float]
+) -> bool:
+    if not rule.enabled:
+        return False
+    if rule.color is not None and item.detection.color != rule.color:
+        return False
+    x, y = workspace
+    if rule.x_min is not None and x < float(rule.x_min):
+        return False
+    if rule.x_max is not None and x > float(rule.x_max):
+        return False
+    if rule.y_min is not None and y < float(rule.y_min):
+        return False
+    if rule.y_max is not None and y > float(rule.y_max):
+        return False
+    if rule.radius_min is not None or rule.radius_max is not None:
+        radius = distance_m(
+            workspace, (float(rule.radius_origin_x), float(rule.radius_origin_y))
+        )
+        if rule.radius_min is not None and radius < float(rule.radius_min):
+            return False
+        if rule.radius_max is not None and radius > float(rule.radius_max):
+            return False
+    if rule.scan_angle_min is not None and item.scan_angle < float(rule.scan_angle_min):
+        return False
+    if rule.scan_angle_max is not None and item.scan_angle > float(rule.scan_angle_max):
+        return False
+    return True
+
+
+def apply_workspace_corrections(
+    item: MappedBlock, rules: Sequence[WorkspaceCorrectionRule]
+) -> MappedBlock:
+    raw_workspace = item.workspace
+    corrected = raw_workspace
+    applied_rules: List[str] = []
+    correction_note: List[str] = []
+    total_dx = 0.0
+    total_dy = 0.0
+
+    for rule in rules:
+        if not _rule_matches_workspace(rule, item, raw_workspace):
+            continue
+        next_x = rule.pivot_x + (corrected[0] - rule.pivot_x) * rule.scale_x + rule.dx_m
+        next_y = (
+            rule.pivot_y
+            + (corrected[1] - rule.pivot_y) * rule.scale_y
+            + rule.dy_m
+            + (corrected[0] - rule.pivot_x) * rule.y_shear_m_per_m
+        )
+        total_dx += next_x - corrected[0]
+        total_dy += next_y - corrected[1]
+        corrected = (round(next_x, 5), round(next_y, 5))
+        applied_rules.append(rule.rule_id)
+        if rule.note:
+            correction_note.append(rule.note)
+
+    return replace(
+        item,
+        raw_workspace=raw_workspace,
+        workspace=corrected,
+        workspace_correction_dx_m=round(total_dx, 5),
+        workspace_correction_dy_m=round(total_dy, 5),
+        workspace_correction_rule=",".join(applied_rules),
+        workspace_correction_note="; ".join(correction_note),
+    )
+
+
+def mapped_conflict_score(item: MappedBlock, config: dict) -> float:
+    """Score one fused target for cross-colour conflict suppression."""
+
+    return candidate_workspace_weight(item, config) * max(
+        1.0, float(item.supporting_views)
+    )
+
+
+def suppress_cross_color_conflicts(
+    selected_with_views: Sequence[Tuple[MappedBlock, List[MappedBlock], List[MappedBlock]]],
+    config: dict,
+) -> Tuple[
+    List[Tuple[MappedBlock, List[MappedBlock], List[MappedBlock]]],
+    List[dict],
+]:
+    vision = config.get("vision", {})
+    conflict_distance = float(vision.get("cross_color_conflict_distance_m", 0.0))
+    if conflict_distance <= 0.0:
+        return list(selected_with_views), []
+    max_area_ratio = float(vision.get("cross_color_conflict_max_area_ratio", 0.35))
+    max_score_ratio = float(vision.get("cross_color_conflict_max_score_ratio", 0.65))
+
+    suppressed_indexes = set()
+    suppressed_records: List[dict] = []
+
+    for left_index, (left_item, _, _) in enumerate(selected_with_views):
+        if left_index in suppressed_indexes:
+            continue
+        for right_index in range(left_index + 1, len(selected_with_views)):
+            if right_index in suppressed_indexes:
+                continue
+            right_item = selected_with_views[right_index][0]
+            if left_item.detection.color == right_item.detection.color:
+                continue
+            distance = distance_m(left_item.raw_workspace, right_item.raw_workspace)
+            if distance > conflict_distance:
+                continue
+
+            left_score = mapped_conflict_score(left_item, config)
+            right_score = mapped_conflict_score(right_item, config)
+            left_key = (
+                left_score,
+                left_item.detection.area,
+                left_item.supporting_views,
+            )
+            right_key = (
+                right_score,
+                right_item.detection.area,
+                right_item.supporting_views,
+            )
+            if left_key >= right_key:
+                winner_index, loser_index = left_index, right_index
+                winner_item, loser_item = left_item, right_item
+                winner_score, loser_score = left_score, right_score
+            else:
+                winner_index, loser_index = right_index, left_index
+                winner_item, loser_item = right_item, left_item
+                winner_score, loser_score = right_score, left_score
+
+            area_ratio = min(left_item.detection.area, right_item.detection.area) / max(
+                left_item.detection.area, right_item.detection.area, 1.0
+            )
+            score_ratio = min(left_score, right_score) / max(
+                left_score, right_score, 1e-6
+            )
+            if area_ratio > max_area_ratio and score_ratio > max_score_ratio:
+                continue
+
+            suppressed_indexes.add(loser_index)
+            suppressed_records.append(
+                {
+                    "target_id": loser_item.target_id,
+                    "color": loser_item.detection.color,
+                    "raw_workspace_x": loser_item.raw_workspace[0],
+                    "raw_workspace_y": loser_item.raw_workspace[1],
+                    "workspace_x": loser_item.workspace[0],
+                    "workspace_y": loser_item.workspace[1],
+                    "area": round(loser_item.detection.area, 1),
+                    "supporting_views": loser_item.supporting_views,
+                    "suppressed_by_target_id": winner_item.target_id,
+                    "suppressed_by_color": winner_item.detection.color,
+                    "distance_to_winner_m": round(distance, 5),
+                    "area_ratio": round(area_ratio, 3),
+                    "score_ratio": round(score_ratio, 3),
+                }
+            )
+
+    kept = [
+        entry
+        for index, entry in enumerate(selected_with_views)
+        if index not in suppressed_indexes
+    ]
+    return kept, suppressed_records
+
+
+def weighted_workspace_average(
+    items: Sequence[MappedBlock], config: dict
+) -> Tuple[float, float]:
+    points = np.array([item.workspace for item in items], dtype=np.float64)
+    weights = np.array(
+        [candidate_workspace_weight(item, config) for item in items], dtype=np.float64
+    )
+    total = float(weights.sum())
+    if total <= 0.0:
+        averaged = points.mean(axis=0)
+    else:
+        averaged = np.average(points, axis=0, weights=weights)
+    return round(float(averaged[0]), 5), round(float(averaged[1]), 5)
+
+
+def fuse_cluster_observations(
+    items: Sequence[MappedBlock], config: dict, merge_distance_m: float
+) -> Tuple[MappedBlock, List[MappedBlock]]:
+    """Fuse one object cluster into a more stable global workspace coordinate."""
+
+    if not items:
+        raise ValueError("Cannot fuse an empty cluster.")
+
+    if len(items) == 1:
+        single = replace(
+            items[0],
+            coordinate_spread_m=0.0,
+            raw_coordinate_spread_m=0.0,
+            supporting_views=1,
+            raw_supporting_views=1,
+            outlier_views=0,
+            fusion_method="single_view",
+            raw_workspace=items[0].workspace,
+        )
+        return single, [items[0]]
+
+    fusion = config.get("vision", {}).get("fusion", {})
+    inlier_radius_m = float(
+        fusion.get("inlier_radius_m", min(merge_distance_m * 0.5, 0.015))
+    )
+    minimum_inlier_views = int(fusion.get("minimum_inlier_views", 2))
+
+    support_scores: List[float] = []
+    for centre in items:
+        score = 0.0
+        for candidate in items:
+            if distance_m(centre.workspace, candidate.workspace) <= inlier_radius_m:
+                score += candidate_workspace_weight(candidate, config)
+        support_scores.append(score)
+
+    consensus_index = int(np.argmax(np.array(support_scores, dtype=np.float64)))
+    consensus_item = items[consensus_index]
+    inliers = [
+        item
+        for item in items
+        if distance_m(consensus_item.workspace, item.workspace) <= inlier_radius_m
+    ]
+    if len(inliers) < minimum_inlier_views:
+        inliers = list(items)
+
+    fused_workspace = weighted_workspace_average(inliers, config)
+    anchor = min(inliers, key=anchor_view_sort_key)
+
+    inlier_spread = max(
+        distance_m(item.workspace, fused_workspace) for item in inliers
+    )
+    raw_spread = max(distance_m(item.workspace, fused_workspace) for item in items)
+
+    fused = replace(
+        anchor,
+        workspace=fused_workspace,
+        coordinate_spread_m=round(inlier_spread, 5),
+        raw_coordinate_spread_m=round(raw_spread, 5),
+        supporting_views=len(inliers),
+        raw_supporting_views=len(items),
+        outlier_views=len(items) - len(inliers),
+        fusion_method="weighted_inlier_mean",
+        raw_workspace=fused_workspace,
+    )
+    return fused, inliers
+
+
 def scan_workspace(
     cap: cv2.VideoCapture,
     arm: "DofbotArm",
     detector: ColorBlockDetector,
     config: dict,
+    feedback_rules: Sequence[WorkspaceCorrectionRule],
+    feedback_config: Path,
     colors: Sequence[str],
     sample_frames: int,
     min_hits: int,
@@ -528,7 +888,7 @@ def scan_workspace(
         # Always leave the camera and arm at the calibrated 90-degree map view.
         arm.move(config["arm"]["poses"]["observe"], 1000)
 
-    selected_with_views: List[Tuple[MappedBlock, List[MappedBlock]]] = []
+    selected_with_views: List[Tuple[MappedBlock, List[MappedBlock], List[MappedBlock]]] = []
     for color in colors:
         clusters = object_clusters(color)
         clusters.sort(
@@ -537,38 +897,34 @@ def scan_workspace(
             )
         )
         for object_index, items in enumerate(clusters, start=1):
-            # Use the most horizontally centred view. The arm sweep changes x
-            # strongly but leaves y mostly fixed, so x is the useful term.
-            best = min(
-                items,
-                key=lambda item: (
-                    abs(item.detection.center[0] - 320),
-                    item.detection.white_ring_ratio,
-                    -item.detection.area,
-                ),
+            fused, inliers = fuse_cluster_observations(items, config, merge_distance_m)
+            fused.target_id = "%s-%02d" % (color, object_index)
+            selected_with_views.append(
+                (apply_workspace_corrections(fused, feedback_rules), items, inliers)
             )
-            distances = [
-                math.hypot(
-                    item.workspace[0] - best.workspace[0],
-                    item.workspace[1] - best.workspace[1],
-                )
-                for item in items
-            ]
-            best.coordinate_spread_m = max(distances, default=0.0)
-            best.supporting_views = len(items)
-            best.target_id = "%s-%02d" % (color, object_index)
-            selected_with_views.append((best, items))
 
-    selected = [item for item, _ in selected_with_views]
+    selected_with_views, suppressed_blocks = suppress_cross_color_conflicts(
+        selected_with_views, config
+    )
+    selected = [item for item, _, _ in selected_with_views]
 
     data = {
         "coordinate_frame": "base_90_global_xy_meters",
-        "coordinate_source": "vendor_top_contour_center_best_centered_view",
+        "coordinate_source": (
+            "vendor_top_contour_center_weighted_inlier_mean+feedback_compensation"
+            if feedback_rules
+            else "vendor_top_contour_center_weighted_inlier_mean"
+        ),
+        "feedback_compensation_file": str(feedback_config),
+        "feedback_compensation_rules": [rule.rule_id for rule in feedback_rules],
         "scan_angles": sorted(captured_angles),
+        "suppressed_blocks": suppressed_blocks,
         "blocks": [
             {
                 "target_id": item.target_id,
                 "color": item.detection.color,
+                "raw_workspace_x": item.raw_workspace[0],
+                "raw_workspace_y": item.raw_workspace[1],
                 "workspace_x": item.workspace[0],
                 "workspace_y": item.workspace[1],
                 "scan_angle": item.scan_angle,
@@ -579,25 +935,49 @@ def scan_workspace(
                 "white_ring_ratio": round(item.detection.white_ring_ratio, 3),
                 "body_edge_ratio": round(item.detection.body_edge_ratio, 3),
                 "coordinate_spread_m": round(item.coordinate_spread_m, 5),
+                "raw_coordinate_spread_m": round(item.raw_coordinate_spread_m, 5),
                 "supporting_views": item.supporting_views,
+                "raw_supporting_views": item.raw_supporting_views,
+                "outlier_views": item.outlier_views,
+                "fusion_method": item.fusion_method,
+                "workspace_correction_dx_m": round(item.workspace_correction_dx_m, 5),
+                "workspace_correction_dy_m": round(item.workspace_correction_dy_m, 5),
+                "workspace_correction_rule": item.workspace_correction_rule,
+                "workspace_correction_note": item.workspace_correction_note,
+                "anchor_snapshot": item.snapshot,
                 "view_candidates": [
                     {
                         "scan_angle": candidate.scan_angle,
                         "commanded_scan_angle": candidate.commanded_scan_angle,
                         "pixel_center": list(candidate.detection.center),
                         "workspace": list(candidate.workspace),
+                        "weight": round(candidate_workspace_weight(candidate, config), 4),
+                        "inlier": any(candidate is inlier for inlier in inliers),
                     }
                     for candidate in cluster
                 ],
                 "snapshot": item.snapshot,
             }
-            for item, cluster in selected_with_views
+            for item, cluster, inliers in selected_with_views
         ],
     }
     map_output.parent.mkdir(parents=True, exist_ok=True)
     with map_output.open("w", encoding="utf-8") as file_obj:
         json.dump(data, file_obj, ensure_ascii=False, indent=2)
     print("Scan map saved: %s" % map_output)
+    if suppressed_blocks:
+        print("Suppressed %d conflicting target(s)." % len(suppressed_blocks))
+        for entry in suppressed_blocks:
+            print(
+                "  suppress %-10s near %-10s distance=%.1fmm area_ratio=%.2f score_ratio=%.2f"
+                % (
+                    entry["target_id"],
+                    entry["suppressed_by_target_id"],
+                    entry["distance_to_winner_m"] * 1000.0,
+                    entry["area_ratio"],
+                    entry["score_ratio"],
+                )
+            )
     return selected
 
 
@@ -809,6 +1189,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scan-dir", type=Path, default=ROOT / "scan")
     parser.add_argument("--map-output", type=Path, default=ROOT / "scan_map.json")
     parser.add_argument(
+        "--feedback-config",
+        type=Path,
+        default=ROOT / "feedback_compensation.json",
+        help="Optional workspace correction rules used after multi-view fusion.",
+    )
+    parser.add_argument(
         "--scan-map",
         action="store_true",
         help="Move the arm-mounted camera through all views and build a map; do not grip.",
@@ -825,6 +1211,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     config = load_config(args.config)
+    feedback_rules = load_workspace_corrections(args.feedback_config)
     colors = [item.strip().lower() for item in args.colors.split(",") if item.strip()]
     supported = set(config["vision"]["hsv_ranges"])
     unknown = [color for color in colors if color not in supported]
@@ -863,6 +1250,8 @@ def main() -> int:
                     arm,
                     detector,
                     config,
+                    feedback_rules,
+                    args.feedback_config,
                     colors,
                     args.sample_frames,
                     args.min_hits,
@@ -912,18 +1301,28 @@ def main() -> int:
             for mapped in ordered_mapped:
                 item = mapped.detection
                 print(
-                    "  %-10s global=%r from_scan=%.1f pixel=%r area=%.0f"
+                    "  %-10s global=%r raw=%r anchor_scan=%.1f pixel=%r area=%.0f"
                     % (
                         mapped.target_id,
                         mapped.workspace,
+                        mapped.raw_workspace,
                         mapped.scan_angle,
                         item.center,
                         item.area,
                     )
                 )
                 print(
-                    "         views=%d coordinate_spread=%.1fmm"
-                    % (mapped.supporting_views, mapped.coordinate_spread_m * 1000.0)
+                    "         views=%d/%d outliers=%d coordinate_spread=%.1fmm raw_spread=%.1fmm correction=(%.1fmm,%.1fmm) rule=%s"
+                    % (
+                        mapped.supporting_views,
+                        mapped.raw_supporting_views,
+                        mapped.outlier_views,
+                        mapped.coordinate_spread_m * 1000.0,
+                        mapped.raw_coordinate_spread_m * 1000.0,
+                        mapped.workspace_correction_dx_m * 1000.0,
+                        mapped.workspace_correction_dy_m * 1000.0,
+                        mapped.workspace_correction_rule or "-",
+                    )
                 )
         else:
             print(
@@ -986,8 +1385,8 @@ def main() -> int:
                 mapped,
                 arm.inverse_kinematics_xy(
                     mapped.workspace,
-                    source="%s scan=%.1f"
-                    % (mapped.target_id, mapped.scan_angle),
+                    source="%s fused anchor=%.1f views=%d"
+                    % (mapped.target_id, mapped.scan_angle, mapped.supporting_views),
                 ),
             )
             for mapped in ordered_mapped

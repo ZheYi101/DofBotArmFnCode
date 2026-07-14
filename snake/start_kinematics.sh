@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -u
 
+set +u
 source /opt/ros/noetic/setup.bash
 source /home/dofbot/dofbot_ws/devel/setup.bash
+set -u
 
 if ! rostopic list >/dev/null 2>&1; then
   echo "错误：ROS Master 不可用。请先启动机器原有 ROS 大程序。" >&2
