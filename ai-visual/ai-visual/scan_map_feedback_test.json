@@ -1,0 +1,99 @@
+{
+  "coordinate_frame": "base_90_global_xy_meters",
+  "coordinate_source": "vendor_top_contour_center_best_centered_view",
+  "scan_angles": [
+    60,
+    75,
+    76,
+    80,
+    85,
+    90,
+    95,
+    120
+  ],
+  "blocks": [
+    {
+      "color": "blue",
+      "workspace_x": 0.06117,
+      "workspace_y": 0.25257,
+      "scan_angle": 76.0,
+      "commanded_scan_angle": 76,
+      "pixel_center": [
+        313,
+        218
+      ],
+      "grasp_pixel_center": [
+        313,
+        218
+      ],
+      "area": 11833.8,
+      "white_ring_ratio": 0.54,
+      "body_edge_ratio": 0.221,
+      "coordinate_spread_m": 0.00413,
+      "supporting_views": 5,
+      "view_candidates": [
+        {
+          "scan_angle": 89.0,
+          "commanded_scan_angle": 90,
+          "pixel_center": [
+            532,
+            248
+          ],
+          "workspace": [
+            0.05739,
+            0.25091
+          ]
+        },
+        {
+          "scan_angle": 75.0,
+          "commanded_scan_angle": 75,
+          "pixel_center": [
+            301,
+            217
+          ],
+          "workspace": [
+            0.06274,
+            0.2525
+          ]
+        },
+        {
+          "scan_angle": 79.0,
+          "commanded_scan_angle": 80,
+          "pixel_center": [
+            365,
+            221
+          ],
+          "workspace": [
+            0.06048,
+            0.25216
+          ]
+        },
+        {
+          "scan_angle": 84.0,
+          "commanded_scan_angle": 85,
+          "pixel_center": [
+            451,
+            232
+          ],
+          "workspace": [
+            0.05934,
+            0.2513
+          ]
+        },
+        {
+          "scan_angle": 76.0,
+          "commanded_scan_angle": 76,
+          "pixel_center": [
+            313,
+            218
+          ],
+          "workspace": [
+            0.06117,
+            0.25257
+          ]
+        }
+      ],
+      "snapshot": "scan_feedback_test/scan_076.jpg"
+    }
+  ]
+}

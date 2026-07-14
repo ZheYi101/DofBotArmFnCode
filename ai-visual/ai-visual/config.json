@@ -1,0 +1,67 @@
+{
+  "vision": {
+    "hsv_ranges": {
+      "red": [
+        [[0, 70, 50], [18, 255, 255]],
+        [[155, 70, 50], [180, 255, 255]]
+      ],
+      "yellow": [
+        [[18, 90, 100], [34, 255, 255]]
+      ],
+      "green": [
+        [[35, 50, 40], [95, 255, 255]]
+      ],
+      "blue": [
+        [[95, 100, 50], [130, 255, 255]]
+      ]
+    },
+    "min_area": 800,
+    "max_area": 30000,
+    "min_aspect_ratio": 1.0,
+    "max_aspect_ratio": 2.0,
+    "morph_kernel": 5,
+    "edge_margin": 10,
+    "surround_padding": 25,
+    "white_saturation_max": 35,
+    "white_value_min": 150,
+    "max_white_ring_ratio": 0.82,
+    "min_body_edge_ratio": 0.04,
+    "canny_low": 40,
+    "canny_high": 120,
+    "multi_object_track_radius_px": 45,
+    "map_merge_distance_m": 0.03
+  },
+  "arm": {
+    "gripper_open": 30,
+    "gripper_close": 143,
+    "gripper_open_time_ms": 500,
+    "gripper_close_time_ms": 400,
+    "move_time_ms": 1000,
+    "pick_descend_time_ms": 1500,
+    "pick_correction_time_ms": 700,
+    "pick_settle_seconds": 0.4,
+    "pick_joint_tolerance_deg": 2,
+    "pick_joint_abort_deg": 5,
+    "scan_settle_seconds": 0.8,
+    "refine_scan_offsets": [-15, -10, -5, 5],
+    "refine_min_angle": 45,
+    "refine_max_angle": 135,
+    "max_coordinate_spread_m": 0.025,
+    "min_execute_supporting_views": 2,
+    "scan_poses": [
+      {"angle": 60, "pose": [60, 130, 0, 0, 90]},
+      {"angle": 90, "pose": [90, 130, 0, 0, 90]},
+      {"angle": 120, "pose": [120, 130, 0, 0, 90]}
+    ],
+    "poses": {
+      "observe": [90, 130, 0, 0, 90],
+      "top": [90, 80, 50, 50, 270],
+      "layers": [
+        [90, 48, 35, 30, 270],
+        [90, 65, 25, 36, 270],
+        [90, 65, 44, 17, 270],
+        [89, 91, 27, 27, 270]
+      ]
+    }
+  }
+}

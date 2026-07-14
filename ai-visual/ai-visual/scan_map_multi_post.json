@@ -1,0 +1,100 @@
+{
+  "coordinate_frame": "base_90_global_xy_meters",
+  "coordinate_source": "vendor_top_contour_center_best_centered_view",
+  "scan_angles": [
+    60,
+    90,
+    105,
+    109,
+    110,
+    115,
+    120,
+    125
+  ],
+  "blocks": [
+    {
+      "target_id": "blue-01",
+      "color": "blue",
+      "workspace_x": -0.08326,
+      "workspace_y": 0.24871,
+      "scan_angle": 109.0,
+      "commanded_scan_angle": 109,
+      "pixel_center": [
+        329,
+        209
+      ],
+      "grasp_pixel_center": [
+        329,
+        209
+      ],
+      "area": 11497.8,
+      "white_ring_ratio": 0.597,
+      "body_edge_ratio": 0.241,
+      "coordinate_spread_m": 0.00404,
+      "supporting_views": 5,
+      "view_candidates": [
+        {
+          "scan_angle": 105.0,
+          "commanded_scan_angle": 105,
+          "pixel_center": [
+            258,
+            206
+          ],
+          "workspace": [
+            -0.08306,
+            0.25009
+          ]
+        },
+        {
+          "scan_angle": 109.0,
+          "commanded_scan_angle": 109,
+          "pixel_center": [
+            329,
+            209
+          ],
+          "workspace": [
+            -0.08326,
+            0.24871
+          ]
+        },
+        {
+          "scan_angle": 109.0,
+          "commanded_scan_angle": 110,
+          "pixel_center": [
+            330,
+            209
+          ],
+          "workspace": [
+            -0.08302,
+            0.2488
+          ]
+        },
+        {
+          "scan_angle": 114.0,
+          "commanded_scan_angle": 115,
+          "pixel_center": [
+            414,
+            217
+          ],
+          "workspace": [
+            -0.08434,
+            0.2472
+          ]
+        },
+        {
+          "scan_angle": 119.0,
+          "commanded_scan_angle": 120,
+          "pixel_center": [
+            496,
+            231
+          ],
+          "workspace": [
+            -0.08582,
+            0.24558
+          ]
+        }
+      ],
+      "snapshot": "scan_multi_post/scan_109.jpg"
+    }
+  ]
+}

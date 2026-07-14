@@ -1,0 +1,81 @@
+{
+  "coordinate_frame": "base_90_global_xy_meters",
+  "coordinate_source": "vendor_top_contour_center_best_centered_view",
+  "scan_angles": [
+    60,
+    90,
+    105,
+    110,
+    115,
+    120,
+    125
+  ],
+  "blocks": [
+    {
+      "color": "blue",
+      "workspace_x": -0.0848,
+      "workspace_y": 0.24029,
+      "scan_angle": 110,
+      "pixel_center": [
+        330,
+        237
+      ],
+      "grasp_pixel_center": [
+        330,
+        237
+      ],
+      "area": 12662.2,
+      "white_ring_ratio": 0.621,
+      "body_edge_ratio": 0.259,
+      "coordinate_spread_m": 0.0052,
+      "supporting_views": 4,
+      "view_candidates": [
+        {
+          "scan_angle": 120,
+          "pixel_center": [
+            494,
+            259
+          ],
+          "workspace": [
+            -0.08679,
+            0.23733
+          ]
+        },
+        {
+          "scan_angle": 105,
+          "pixel_center": [
+            261,
+            234
+          ],
+          "workspace": [
+            -0.0804,
+            0.24307
+          ]
+        },
+        {
+          "scan_angle": 110,
+          "pixel_center": [
+            330,
+            237
+          ],
+          "workspace": [
+            -0.0848,
+            0.24029
+          ]
+        },
+        {
+          "scan_angle": 115,
+          "pixel_center": [
+            413,
+            245
+          ],
+          "workspace": [
+            -0.08571,
+            0.23882
+          ]
+        }
+      ],
+      "snapshot": "scan_execute_optimized/scan_110.jpg"
+    }
+  ]
+}

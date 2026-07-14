@@ -1,0 +1,262 @@
+{
+  "coordinate_frame": "base_90_global_xy_meters",
+  "coordinate_source": "vendor_top_contour_center_best_centered_view",
+  "scan_angles": [
+    60,
+    75,
+    80,
+    82,
+    83,
+    85,
+    90,
+    95,
+    105,
+    109,
+    110,
+    115,
+    120,
+    125
+  ],
+  "blocks": [
+    {
+      "target_id": "yellow-01",
+      "color": "yellow",
+      "workspace_x": -0.09362,
+      "workspace_y": 0.27419,
+      "scan_angle": 109.0,
+      "commanded_scan_angle": 110,
+      "pixel_center": [
+        323,
+        106
+      ],
+      "grasp_pixel_center": [
+        323,
+        106
+      ],
+      "area": 7732.0,
+      "white_ring_ratio": 0.443,
+      "body_edge_ratio": 0.236,
+      "coordinate_spread_m": 0.00767,
+      "supporting_views": 5,
+      "view_candidates": [
+        {
+          "scan_angle": 104.0,
+          "commanded_scan_angle": 105,
+          "pixel_center": [
+            231,
+            103
+          ],
+          "workspace": [
+            -0.09187,
+            0.27652
+          ]
+        },
+        {
+          "scan_angle": 108.0,
+          "commanded_scan_angle": 109,
+          "pixel_center": [
+            303,
+            105
+          ],
+          "workspace": [
+            -0.09366,
+            0.27449
+          ]
+        },
+        {
+          "scan_angle": 109.0,
+          "commanded_scan_angle": 110,
+          "pixel_center": [
+            323,
+            106
+          ],
+          "workspace": [
+            -0.09362,
+            0.27419
+          ]
+        },
+        {
+          "scan_angle": 114.0,
+          "commanded_scan_angle": 115,
+          "pixel_center": [
+            409,
+            114
+          ],
+          "workspace": [
+            -0.09665,
+            0.27179
+          ]
+        },
+        {
+          "scan_angle": 119.0,
+          "commanded_scan_angle": 120,
+          "pixel_center": [
+            494,
+            128
+          ],
+          "workspace": [
+            -0.09958,
+            0.26937
+          ]
+        }
+      ],
+      "snapshot": "/home/dofbot/workspace/ai-visual/scan/scan_110.jpg"
+    },
+    {
+      "target_id": "green-01",
+      "color": "green",
+      "workspace_x": -0.16135,
+      "workspace_y": 0.20077,
+      "scan_angle": 124.0,
+      "commanded_scan_angle": 125,
+      "pixel_center": [
+        234,
+        230
+      ],
+      "grasp_pixel_center": [
+        234,
+        230
+      ],
+      "area": 12340.8,
+      "white_ring_ratio": 0.419,
+      "body_edge_ratio": 0.251,
+      "coordinate_spread_m": 0.00158,
+      "supporting_views": 2,
+      "view_candidates": [
+        {
+          "scan_angle": 119.0,
+          "commanded_scan_angle": 120,
+          "pixel_center": [
+            143,
+            235
+          ],
+          "workspace": [
+            -0.16249,
+            0.20186
+          ]
+        },
+        {
+          "scan_angle": 124.0,
+          "commanded_scan_angle": 125,
+          "pixel_center": [
+            234,
+            230
+          ],
+          "workspace": [
+            -0.16135,
+            0.20077
+          ]
+        }
+      ],
+      "snapshot": "/home/dofbot/workspace/ai-visual/scan/scan_125.jpg"
+    },
+    {
+      "target_id": "blue-01",
+      "color": "blue",
+      "workspace_x": 0.03954,
+      "workspace_y": 0.27598,
+      "scan_angle": 82.0,
+      "commanded_scan_angle": 83,
+      "pixel_center": [
+        323,
+        147
+      ],
+      "grasp_pixel_center": [
+        323,
+        147
+      ],
+      "area": 9668.8,
+      "white_ring_ratio": 0.611,
+      "body_edge_ratio": 0.223,
+      "coordinate_spread_m": 0.00705,
+      "supporting_views": 7,
+      "view_candidates": [
+        {
+          "scan_angle": 75.0,
+          "commanded_scan_angle": 75,
+          "pixel_center": [
+            200,
+            146
+          ],
+          "workspace": [
+            0.04325,
+            0.27733
+          ]
+        },
+        {
+          "scan_angle": 79.0,
+          "commanded_scan_angle": 80,
+          "pixel_center": [
+            268,
+            145
+          ],
+          "workspace": [
+            0.04054,
+            0.27668
+          ]
+        },
+        {
+          "scan_angle": 82.0,
+          "commanded_scan_angle": 82,
+          "pixel_center": [
+            323,
+            147
+          ],
+          "workspace": [
+            0.03954,
+            0.27598
+          ]
+        },
+        {
+          "scan_angle": 82.0,
+          "commanded_scan_angle": 83,
+          "pixel_center": [
+            323,
+            147
+          ],
+          "workspace": [
+            0.03954,
+            0.27598
+          ]
+        },
+        {
+          "scan_angle": 84.0,
+          "commanded_scan_angle": 85,
+          "pixel_center": [
+            357,
+            150
+          ],
+          "workspace": [
+            0.03826,
+            0.27551
+          ]
+        },
+        {
+          "scan_angle": 89.0,
+          "commanded_scan_angle": 90,
+          "pixel_center": [
+            442,
+            159
+          ],
+          "workspace": [
+            0.03531,
+            0.27503
+          ]
+        },
+        {
+          "scan_angle": 94.0,
+          "commanded_scan_angle": 95,
+          "pixel_center": [
+            527,
+            175
+          ],
+          "workspace": [
+            0.0327,
+            0.27428
+          ]
+        }
+      ],
+      "snapshot": "/home/dofbot/workspace/ai-visual/scan/scan_083.jpg"
+    }
+  ]
+}
