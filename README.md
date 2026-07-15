@@ -90,6 +90,46 @@ Follow example:
 powershell -ExecutionPolicy Bypass -File tools\run_snake_over_ssh.ps1 --follow --color yellow --frames 120
 ```
 
+### `block-arrange`
+
+- Local wrapper: `tools/run_block_arrange_over_ssh.ps1`
+- Remote wrapper: `tools/run_block_arrange_on_dofbot.sh`
+- `resync` rebuilds the stored block scene from `ai-visual`
+- `move` automatically undoes prior moves when the source block is covered,
+  stopping as soon as that block becomes the top of its stack
+- `--no-auto-undo` restores fail-fast behavior for operators who do not want
+  earlier moves changed
+- Horizontal destinations must be at least 8cm from every other block; the
+  default horizontal distance is also 8cm
+- `undo` reverses the latest successful move
+- `voice --text ...` parses one ASR transcript into an ordered `resync`/`move`
+  sequence; it is plan-only unless `--execute` is supplied
+
+Safe planning example:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\run_block_arrange_over_ssh.ps1 move --source blue --target red --relation right --distance-cm 8 --dry-run
+```
+
+Execute example:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\run_block_arrange_over_ssh.ps1 move --source blue --target red --relation above
+```
+
+Voice transcript planning example (does not move the arm):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\run_block_arrange_over_ssh.ps1 voice --text "扫描当前场景，然后把红色方块放到蓝色方块上面"
+```
+
+For Chinese free-form speech, pass the ASR transcript to the same `voice`
+command and add `--execute` only after the recognized text has been confirmed.
+The built-in I2C speech-recognition module returns IDs for pre-registered
+phrases, so it is suitable for wake words and short fixed commands, not full
+multi-step transcripts. A microphone ASR service should produce text and call
+this adapter.
+
 ## Directory Resolution
 
 Remote wrappers should probe multiple locations because the code on Dofbot may

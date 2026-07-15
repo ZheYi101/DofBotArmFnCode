@@ -61,9 +61,15 @@ COMMAND_RE = re.compile(
     r"把\s*(?P<source>红色|红|黄色|黄|绿色|绿|蓝色|蓝|red|yellow|green|blue)\s*方块\s*"
     r"放到\s*(?P<target>红色|红|黄色|黄|绿色|绿|蓝色|蓝|red|yellow|green|blue)\s*方块\s*"
     r"(?P<relation>左边|左|右边|右|前面|前|后面|后|上面|上|left|right|front|back|above)\s*"
-    r"(?:(?P<distance>[0-9]+(?:\.[0-9]+)?)\s*cm)?\s*$",
+    r"(?:(?P<distance>[0-9]+(?:\.[0-9]+)?)\s*(?:cm|厘米))?\s*$",
     re.IGNORECASE,
 )
+
+
+class BlockNotTopmostError(RuntimeError):
+    def __init__(self, color: str):
+        self.color = color
+        super().__init__("Cannot move %s: it is not the top block of its stack." % color)
 
 
 def load_json(path: Path) -> dict:
@@ -95,6 +101,19 @@ def load_visual_module(ai_visual_dir: Path):
     spec = importlib.util.spec_from_file_location("ai_visual_runtime", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Cannot load ai-visual module from %s" % module_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_voice_module():
+    module_path = ROOT / "voice_adapter.py"
+    if not module_path.exists():
+        raise FileNotFoundError("Cannot find voice adapter: %s" % module_path)
+    spec = importlib.util.spec_from_file_location("block_arrange_voice_adapter", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Cannot load voice adapter from %s" % module_path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -162,9 +181,7 @@ def ensure_topmost(state: dict, color: str) -> dict:
     block = get_block(state, color)
     stack = blocks_in_stack(state, block["stack_id"])
     if not stack or stack[-1]["color"] != color:
-        raise RuntimeError(
-            "Cannot move %s: it is not the top block of its stack." % color
-        )
+        raise BlockNotTopmostError(color)
     return block
 
 
@@ -176,7 +193,7 @@ def parse_command_text(text: str) -> dict:
     match = COMMAND_RE.match(text.strip())
     if not match:
         raise ValueError(
-            "Unsupported command text. Example: 把红色方块放到蓝色方块左边3cm"
+            "Unsupported command text. Example: 把红色方块放到蓝色方块左边8cm"
         )
     relation = resolve_alias(match.group("relation"), RELATION_ALIASES, "relation")
     distance_cm = match.group("distance")
@@ -262,6 +279,55 @@ def relation_to_polar_offset(relation: str, distance_m: float) -> Tuple[float, f
     if relation == "back":
         return -distance_m, 0.0
     raise ValueError("Unsupported relation: %s" % relation)
+
+
+def relative_destination(
+    workspace: Tuple[float, float], relation: str, distance_m: float
+) -> Tuple[float, float]:
+    if distance_m <= 0.0:
+        raise ValueError("Horizontal move distance must be greater than zero.")
+    if relation in ("front", "back"):
+        radial_m, tangent_m = relation_to_polar_offset(relation, distance_m)
+        return offset_polar(workspace, radial_m=radial_m, tangent_m=tangent_m)
+    if relation in ("left", "right"):
+        radius, theta = xy_to_polar(workspace)
+        if distance_m > 2.0 * radius:
+            raise ValueError(
+                "Requested side distance %.1fcm is not valid at radius %.1fcm."
+                % (distance_m * 100.0, radius * 100.0)
+            )
+        angle_delta = 2.0 * math.asin(distance_m / (2.0 * radius))
+        if relation == "left":
+            angle_delta = -angle_delta
+        return polar_to_xy(radius, theta + angle_delta)
+    raise ValueError("Unsupported horizontal relation: %s" % relation)
+
+
+def validate_horizontal_clearance(
+    state: dict,
+    source_color: str,
+    dest_x: float,
+    dest_y: float,
+    config: dict,
+) -> None:
+    minimum_m = float(config["scene"].get("min_horizontal_clearance_cm", 8.0)) / 100.0
+    conflicts = []
+    for block in state.get("blocks", []):
+        if block["color"] == source_color:
+            continue
+        distance_m = math.hypot(
+            dest_x - float(block["workspace_x"]),
+            dest_y - float(block["workspace_y"]),
+        )
+        if distance_m + 1e-5 < minimum_m:
+            conflicts.append((distance_m, block["color"]))
+    if conflicts:
+        distance_m, color = min(conflicts)
+        raise RuntimeError(
+            "Unsafe horizontal destination for %s: it would be %.1fcm from %s; "
+            "the configured minimum is %.1fcm."
+            % (source_color, distance_m * 100.0, color, minimum_m * 100.0)
+        )
 
 
 class ArrangementArm:
@@ -502,13 +568,23 @@ def plan_destination(state: dict, request: dict, config: dict) -> dict:
             "noop": False,
         }
 
-    distance_cm = float(request["distance_cm"] or default_distance_cm)
+    distance_cm = (
+        default_distance_cm
+        if request["distance_cm"] is None
+        else float(request["distance_cm"])
+    )
     distance_m = round(distance_cm / 100.0, 5)
-    radial_m, tangent_m = relation_to_polar_offset(relation, distance_m)
-    dest_x, dest_y = offset_polar(
+    dest_x, dest_y = relative_destination(
         (float(target["workspace_x"]), float(target["workspace_y"])),
-        radial_m=radial_m,
-        tangent_m=tangent_m,
+        relation,
+        distance_m,
+    )
+    validate_horizontal_clearance(
+        state,
+        request["source"],
+        dest_x,
+        dest_y,
+        config,
     )
     return {
         "source": source,
@@ -542,6 +618,90 @@ def append_history(history: dict, entry: dict) -> dict:
     return updated
 
 
+def plan_undo_step(current_state: dict, history: dict) -> dict:
+    if not history.get("entries"):
+        raise RuntimeError("Undo history is empty.")
+    entry = history["entries"][-1]
+    previous_state = copy.deepcopy(entry["state_before"])
+    moved_color = entry["moved_color"]
+    try:
+        current_block = ensure_topmost(current_state, moved_color)
+    except BlockNotTopmostError as exc:
+        raise RuntimeError(
+            "Cannot undo history entry for %s because it is no longer the top block. "
+            "Run resync or correct the scene manually."
+            % moved_color
+        ) from exc
+    previous_block = get_block(previous_state, moved_color)
+    remaining_history = copy.deepcopy(history)
+    remaining_history["entries"] = remaining_history.get("entries", [])[:-1]
+    remaining_history["updated_at"] = utc_now()
+    previous_state["updated_at"] = utc_now()
+    return {
+        "entry": entry,
+        "moved_color": moved_color,
+        "current_block": copy.deepcopy(current_block),
+        "previous_block": copy.deepcopy(previous_block),
+        "state_after": previous_state,
+        "history_after": remaining_history,
+    }
+
+
+def plan_auto_undos(state: dict, history: dict, source_color: str) -> Tuple[dict, dict, List[dict]]:
+    working_state = copy.deepcopy(state)
+    working_history = copy.deepcopy(history)
+    steps: List[dict] = []
+    while True:
+        try:
+            ensure_topmost(working_state, source_color)
+            return working_state, working_history, steps
+        except BlockNotTopmostError as exc:
+            if not working_history.get("entries"):
+                raise RuntimeError(
+                    "Cannot make %s movable automatically: undo history is exhausted. "
+                    "Run resync or remove the blocks above it manually."
+                    % source_color
+                ) from exc
+            step = plan_undo_step(working_state, working_history)
+            steps.append(step)
+            working_state = step["state_after"]
+            working_history = step["history_after"]
+
+
+def print_undo_step(step: dict, prefix: str = "Undo") -> None:
+    entry = step["entry"]
+    moved_color = step["moved_color"]
+    current_block = step["current_block"]
+    previous_block = step["previous_block"]
+    print(
+        "%s %s: %s current=(%.5f, %.5f, level=%d) -> previous=(%.5f, %.5f, level=%d)"
+        % (
+            prefix,
+            entry.get("command", ""),
+            moved_color,
+            current_block["workspace_x"],
+            current_block["workspace_y"],
+            current_block["level"],
+            previous_block["workspace_x"],
+            previous_block["workspace_y"],
+            previous_block["level"],
+        )
+    )
+
+
+def execute_undo_step(arm: ArrangementArm, step: dict) -> None:
+    current_block = step["current_block"]
+    previous_block = step["previous_block"]
+    moved_color = step["moved_color"]
+    arm.execute_transfer(
+        (float(current_block["workspace_x"]), float(current_block["workspace_y"])),
+        int(current_block["level"]),
+        (float(previous_block["workspace_x"]), float(previous_block["workspace_y"])),
+        int(previous_block["level"]),
+        "undo:%s" % moved_color,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Relative block arrangement and undo based on ai-visual scanning."
@@ -562,15 +722,36 @@ def parse_args() -> argparse.Namespace:
     resync.add_argument("--dry-run", action="store_true", help="Plan and print, but do not move the arm or write state.")
 
     move = subparsers.add_parser("move", help="Execute one relative arrangement command.")
-    move.add_argument("--command", help='Natural-language command, e.g. "把红色方块放到蓝色方块左边3cm"')
+    move.add_argument("--command", help='Natural-language command, e.g. "把红色方块放到蓝色方块左边8cm"')
     move.add_argument("--source")
     move.add_argument("--target")
     move.add_argument("--relation")
     move.add_argument("--distance-cm", type=float)
+    move.add_argument(
+        "--no-auto-undo",
+        action="store_true",
+        help="Fail instead of undoing prior moves when the source block is covered.",
+    )
     move.add_argument("--dry-run", action="store_true", help="Plan and print, but do not move the arm or write state.")
 
     undo = subparsers.add_parser("undo", help="Undo the most recent successful move.")
     undo.add_argument("--dry-run", action="store_true", help="Plan and print, but do not move the arm or write state.")
+    voice = subparsers.add_parser(
+        "voice",
+        help="Parse and optionally execute an ordered ASR transcript.",
+    )
+    voice.add_argument("--text", required=True, help="Recognized Chinese speech transcript.")
+    voice.add_argument("--colors", default="red,yellow,green,blue")
+    voice.add_argument(
+        "--execute",
+        action="store_true",
+        help="Execute the parsed sequence. Without this flag, only print the plan.",
+    )
+    voice.add_argument(
+        "--no-auto-undo",
+        action="store_true",
+        help="Fail instead of automatically undoing moves that cover a requested source block.",
+    )
     subparsers.add_parser("show-state", help="Print the stored scene state.")
     return parser.parse_args()
 
@@ -619,31 +800,102 @@ def resync_scene(args: argparse.Namespace, config: dict, visual_module) -> int:
             arm.close()
 
 
+def validate_voice_actions(actions: Sequence[dict], config: dict) -> None:
+    minimum_cm = float(config["scene"].get("min_horizontal_clearance_cm", 8.0))
+    for action in actions:
+        if action["kind"] != "move":
+            continue
+        if action["source"] == action["target"]:
+            raise ValueError("Voice move source and target must be different.")
+        distance_cm = action.get("distance_cm")
+        if (
+            action["relation"] != "above"
+            and distance_cm is not None
+            and float(distance_cm) < minimum_cm
+        ):
+            raise ValueError(
+                "Voice move requests %.1fcm, below the configured %.1fcm minimum."
+                % (float(distance_cm), minimum_cm)
+            )
+
+
+def print_voice_plan(actions: Sequence[dict], voice_module) -> None:
+    print("Voice plan actions=%d" % len(actions))
+    for index, action in enumerate(actions, start=1):
+        print("  %d. %s" % (index, voice_module.describe_action(action)))
+
+
+def execute_voice_sequence(
+    args: argparse.Namespace,
+    config: dict,
+    visual_module,
+    actions: Sequence[dict],
+) -> int:
+    for index, action in enumerate(actions, start=1):
+        print("Voice execute step %d/%d kind=%s" % (index, len(actions), action["kind"]))
+        action_args = copy.copy(args)
+        if action["kind"] == "resync":
+            action_args.dry_run = False
+            resync_scene(action_args, config, visual_module)
+            continue
+
+        action_args.command = None
+        action_args.source = action["source"]
+        action_args.target = action["target"]
+        action_args.relation = action["relation"]
+        action_args.distance_cm = action.get("distance_cm")
+        action_args.dry_run = False
+        execute_move(action_args, config, visual_module)
+    print("Voice sequence completed actions=%d" % len(actions))
+    return 0
+
+
 def execute_move(args: argparse.Namespace, config: dict, visual_module) -> int:
     state = load_state(args.state_file)
     if not state.get("blocks"):
         raise RuntimeError("Scene state is empty. Run resync first.")
     history = load_history(args.history_file)
     request = resolve_move_request(args, config)
-    destination = plan_destination(state, request, config)
-    if destination["noop"]:
+    planned_state = state
+    planned_history = history
+    undo_steps: List[dict] = []
+    try:
+        ensure_topmost(state, request["source"])
+    except BlockNotTopmostError:
+        if args.no_auto_undo:
+            raise
+        planned_state, planned_history, undo_steps = plan_auto_undos(
+            state, history, request["source"]
+        )
+
+    destination = plan_destination(planned_state, request, config)
+    for step in undo_steps:
+        print_undo_step(step, prefix="Auto-undo")
+
+    if destination["noop"] and not undo_steps:
         print("Command is already satisfied; no motion executed.")
         return 0
 
     source = destination["source"]
-    print(
-        "Move %s -> %s relation=%s dest=(%.5f, %.5f) level=%d"
-        % (
-            request["source"],
-            request["target"],
-            request["relation"],
-            destination["dest_x"],
-            destination["dest_y"],
-            destination["dest_level"],
+    if destination["noop"]:
+        print("Command will be satisfied after the automatic undo steps.")
+    else:
+        print(
+            "Move %s -> %s relation=%s dest=(%.5f, %.5f) level=%d"
+            % (
+                request["source"],
+                request["target"],
+                request["relation"],
+                destination["dest_x"],
+                destination["dest_y"],
+                destination["dest_level"],
+            )
         )
-    )
     if args.dry_run:
-        print("Dry-run: no arm motion and no state change.")
+        print(
+            "Dry-run: planned %d automatic undo(s); no arm motion and no state change."
+            % len(undo_steps)
+        )
         return 0
 
     ai_visual_dir = Path(config["ai_visual"]["path"])
@@ -651,21 +903,30 @@ def execute_move(args: argparse.Namespace, config: dict, visual_module) -> int:
     arm = None
     try:
         arm = ArrangementArm(visual_module, ai_config, config, args.ik_service, enable_ik=True)
-        arm.execute_transfer(
-            (float(source["workspace_x"]), float(source["workspace_y"])),
-            int(source["level"]),
-            (float(destination["dest_x"]), float(destination["dest_y"])),
-            int(destination["dest_level"]),
-            "%s->%s" % (request["source"], request["target"]),
-        )
+        for step in undo_steps:
+            execute_undo_step(arm, step)
+            save_json(args.state_file, step["state_after"])
+            save_json(args.history_file, step["history_after"])
+        if not destination["noop"]:
+            arm.execute_transfer(
+                (float(source["workspace_x"]), float(source["workspace_y"])),
+                int(source["level"]),
+                (float(destination["dest_x"]), float(destination["dest_y"])),
+                int(destination["dest_level"]),
+                "%s->%s" % (request["source"], request["target"]),
+            )
     finally:
         if arm is not None:
             arm.close()
 
-    state_before = copy.deepcopy(state)
-    updated_state = apply_move_to_state(state, request["source"], destination)
+    if destination["noop"]:
+        print_state(planned_state)
+        return 0
+
+    state_before = copy.deepcopy(planned_state)
+    updated_state = apply_move_to_state(planned_state, request["source"], destination)
     updated_history = append_history(
-        history,
+        planned_history,
         {
             "timestamp": utc_now(),
             "kind": "move",
@@ -688,24 +949,8 @@ def execute_undo(args: argparse.Namespace, config: dict, visual_module) -> int:
     current_state = load_state(args.state_file)
     if not current_state.get("blocks"):
         raise RuntimeError("Scene state is empty. Run resync first.")
-    entry = history["entries"][-1]
-    previous_state = entry["state_before"]
-    moved_color = entry["moved_color"]
-    current_block = ensure_topmost(current_state, moved_color)
-    previous_block = get_block(previous_state, moved_color)
-    print(
-        "Undo %s: %s current=(%.5f, %.5f, level=%d) -> previous=(%.5f, %.5f, level=%d)"
-        % (
-            entry.get("command", ""),
-            moved_color,
-            current_block["workspace_x"],
-            current_block["workspace_y"],
-            current_block["level"],
-            previous_block["workspace_x"],
-            previous_block["workspace_y"],
-            previous_block["level"],
-        )
-    )
+    step = plan_undo_step(current_state, history)
+    print_undo_step(step)
     if args.dry_run:
         print("Dry-run: no arm motion and no history change.")
         return 0
@@ -715,24 +960,14 @@ def execute_undo(args: argparse.Namespace, config: dict, visual_module) -> int:
     arm = None
     try:
         arm = ArrangementArm(visual_module, ai_config, config, args.ik_service, enable_ik=True)
-        arm.execute_transfer(
-            (float(current_block["workspace_x"]), float(current_block["workspace_y"])),
-            int(current_block["level"]),
-            (float(previous_block["workspace_x"]), float(previous_block["workspace_y"])),
-            int(previous_block["level"]),
-            "undo:%s" % moved_color,
-        )
+        execute_undo_step(arm, step)
     finally:
         if arm is not None:
             arm.close()
 
-    remaining_history = copy.deepcopy(history)
-    remaining_history["entries"] = remaining_history.get("entries", [])[:-1]
-    remaining_history["updated_at"] = utc_now()
-    previous_state["updated_at"] = utc_now()
-    save_json(args.state_file, previous_state)
-    save_json(args.history_file, remaining_history)
-    print_state(previous_state)
+    save_json(args.state_file, step["state_after"])
+    save_json(args.history_file, step["history_after"])
+    print_state(step["state_after"])
     return 0
 
 
@@ -751,6 +986,17 @@ def main() -> int:
     if args.action == "undo":
         visual_module = None if args.dry_run else load_visual_module(ai_visual_path)
         return execute_undo(args, config, visual_module)
+    if args.action == "voice":
+        voice_module = load_voice_module()
+        actions = voice_module.parse_voice_text(args.text)
+        validate_voice_actions(actions, config)
+        print("Voice transcript: %s" % args.text)
+        print_voice_plan(actions, voice_module)
+        if not args.execute:
+            print("Plan-only: add --execute to scan or move the arm.")
+            return 0
+        visual_module = load_visual_module(ai_visual_path)
+        return execute_voice_sequence(args, config, visual_module, actions)
     if args.action == "show-state":
         print_state(load_state(args.state_file))
         return 0
